@@ -3,15 +3,13 @@
 #
 #  Task 2.3: Sequence-to-Sequence encoder-decoder using LSTMs.
 #
-#  Architecture (simplest viable design):
-#    - 1-layer LSTM encoder (256 units)
-#    - 1-layer LSTM decoder (256 units) with teacher forcing
+#  Architecture:
+#    - Bidirectional LSTM encoder
+#    - LSTM decoder with additive attention and teacher forcing
 #    - Separate embedding layers for each language (dim=64)
-#  Justification: Only ~5 000 training pairs with short sentences
-#  (avg < 8 tokens).  A single layer per side avoids overfitting while
-#  still learning useful alignments.  256 units is the smallest power-of-two
-#  that handles Bengali morphological complexity; 64-dim embeddings match
-#  the small vocabulary sizes.
+#  Justification: The plain encoder-decoder was producing fluent but
+#  semantically wrong sentences. Attention improves source-target alignment,
+#  especially on multi-word Bengali inputs.
 #
 #  BENGALI FONT SETUP (required to display Bengali characters in plots):
 #    macOS:   brew install font-noto-sans-bengali
@@ -42,15 +40,24 @@ import matplotlib.font_manager as fm
 
 import tensorflow as tf
 from tensorflow.keras.models              import Model
-from tensorflow.keras.layers              import Input, Embedding, LSTM, Dense
+from tensorflow.keras.layers              import (
+    Input, Embedding, LSTM, Dense, Bidirectional, AdditiveAttention, Concatenate
+)
+from tensorflow.keras.callbacks           import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.preprocessing.text  import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from sklearn.model_selection              import train_test_split
 from nltk.translate.bleu_score            import corpus_bleu, sentence_bleu, SmoothingFunction
 
+try:
+    from tensorflow.keras.optimizers.legacy import Adam
+except ImportError:
+    from tensorflow.keras.optimizers import Adam
+
 # ── reproducibility ──────────────────────────────────────────────────────────
 np.random.seed(42)
 tf.random.set_seed(42)
+SEED = 42
 
 # =============================================================================
 #  PATHS
@@ -70,6 +77,11 @@ LSTM_UNITS    = 256
 BATCH_SIZE    = 64
 EPOCHS        = 50
 TEST_SIZE     = 0.30
+VAL_SIZE      = 0.10
+DROPOUT       = 0.25
+RECURRENT_DROPOUT = 0.10
+LEARNING_RATE = 1e-3
+CLIPNORM      = 1.0
 MAX_VOCAB_BEN = 8000   # Bengali morphology inflates vocabulary
 MAX_VOCAB_ENG = 5000   # cap rare English words
 
@@ -180,6 +192,34 @@ def preprocess(pairs):
     return ben_sentences, eng_sentences
 
 
+def shuffle_parallel(source_sentences, target_sentences, seed=SEED):
+    """Apply the same random permutation to both languages."""
+    rng = np.random.default_rng(seed)
+    indices = rng.permutation(len(source_sentences))
+    src = [source_sentences[i] for i in indices]
+    tgt = [target_sentences[i] for i in indices]
+    return src, tgt
+
+
+def length_buckets(source_sentences, target_sentences):
+    """
+    Coarse sentence-length buckets used for more balanced train/val/test splits.
+    This avoids a split that is dominated by only very short or very long pairs.
+    """
+    buckets = []
+    for src, tgt in zip(source_sentences, target_sentences):
+        total_len = len(src.split()) + len(tgt.split())
+        if total_len <= 4:
+            buckets.append('very_short')
+        elif total_len <= 8:
+            buckets.append('short')
+        elif total_len <= 12:
+            buckets.append('medium')
+        else:
+            buckets.append('long')
+    return buckets
+
+
 # =============================================================================
 #  3. TOKENISATION & PADDING
 # =============================================================================
@@ -198,52 +238,81 @@ def build_model(enc_vocab, dec_vocab):
     """
     Returns the training model and the two inference sub-models.
     Encoder reads Bengali; decoder generates English.
-    Architecture: single-layer LSTM encoder + single-layer LSTM decoder.
+    Architecture: bidirectional LSTM encoder + attention-based LSTM decoder.
     """
+    encoder_half_units = LSTM_UNITS // 2
+
     # ── Shared layer objects (reused by inference models) ────────────────────
     enc_emb_layer  = Embedding(enc_vocab, EMBEDDING_DIM, name='enc_embedding',
                                 mask_zero=True)
-    enc_lstm_layer = LSTM(LSTM_UNITS, return_state=True, name='enc_lstm')
+    enc_lstm_layer = Bidirectional(
+        LSTM(
+            encoder_half_units,
+            return_sequences=True,
+            return_state=True,
+            dropout=DROPOUT,
+            recurrent_dropout=RECURRENT_DROPOUT,
+        ),
+        name='enc_bi_lstm'
+    )
 
     dec_emb_layer  = Embedding(dec_vocab, EMBEDDING_DIM, name='dec_embedding',
                                 mask_zero=True)
-    dec_lstm_layer = LSTM(LSTM_UNITS, return_sequences=True, return_state=True,
-                          name='dec_lstm')
+    dec_lstm_layer = LSTM(
+        LSTM_UNITS,
+        return_sequences=True,
+        return_state=True,
+        dropout=DROPOUT,
+        recurrent_dropout=RECURRENT_DROPOUT,
+        name='dec_lstm'
+    )
+    attention_layer = AdditiveAttention(name='attention')
+    concat_layer    = Concatenate(axis=-1, name='context_concat')
+    proj_layer      = Dense(LSTM_UNITS, activation='tanh', name='context_projection')
     dec_dense      = Dense(dec_vocab, activation='softmax', name='dec_output')
 
     # ── Training model (teacher forcing) ─────────────────────────────────────
-    enc_in               = Input(shape=(None,), name='encoder_input')
-    enc_emb              = enc_emb_layer(enc_in)
-    _, state_h, state_c  = enc_lstm_layer(enc_emb)
-    enc_states           = [state_h, state_c]
+    enc_in                       = Input(shape=(None,), name='encoder_input')
+    enc_emb                      = enc_emb_layer(enc_in)
+    enc_out_seq, fh, fc, bh, bc  = enc_lstm_layer(enc_emb)
+    state_h                      = Concatenate(name='enc_state_h')([fh, bh])
+    state_c                      = Concatenate(name='enc_state_c')([fc, bc])
+    enc_states                   = [state_h, state_c]
 
     dec_in                    = Input(shape=(None,), name='decoder_input')
     dec_emb                   = dec_emb_layer(dec_in)
     dec_out_seq, _, _         = dec_lstm_layer(dec_emb, initial_state=enc_states)
-    dec_out                   = dec_dense(dec_out_seq)
+    context_seq               = attention_layer([dec_out_seq, enc_out_seq])
+    dec_context               = concat_layer([dec_out_seq, context_seq])
+    dec_context               = proj_layer(dec_context)
+    dec_out                   = dec_dense(dec_context)
 
     training_model = Model([enc_in, dec_in], dec_out)
     training_model.compile(
-        optimizer='adam',
+        optimizer=Adam(learning_rate=LEARNING_RATE, clipnorm=CLIPNORM),
         loss='sparse_categorical_crossentropy',
         metrics=['accuracy']
     )
 
     # ── Inference encoder ─────────────────────────────────────────────────────
-    encoder_model = Model(enc_in, enc_states)
+    encoder_model = Model(enc_in, [enc_out_seq] + enc_states)
 
     # ── Inference decoder (one step at a time) ────────────────────────────────
     dec_state_h_in = Input(shape=(LSTM_UNITS,), name='dec_state_h_in')
     dec_state_c_in = Input(shape=(LSTM_UNITS,), name='dec_state_c_in')
+    enc_out_in     = Input(shape=(None, LSTM_UNITS), name='enc_out_in')
     dec_states_in  = [dec_state_h_in, dec_state_c_in]
 
     dec_single_emb       = dec_emb_layer(dec_in)
     dec_single_out, h, c = dec_lstm_layer(dec_single_emb,
                                           initial_state=dec_states_in)
-    dec_single_dense     = dec_dense(dec_single_out)
+    context_single       = attention_layer([dec_single_out, enc_out_in])
+    dec_single_context   = concat_layer([dec_single_out, context_single])
+    dec_single_context   = proj_layer(dec_single_context)
+    dec_single_dense     = dec_dense(dec_single_context)
 
     decoder_model = Model(
-        [dec_in] + dec_states_in,
+        [dec_in, enc_out_in] + dec_states_in,
         [dec_single_dense, h, c]
     )
 
@@ -263,6 +332,19 @@ def make_decoder_targets(dec_sequences):
     return dec_in, dec_tgt
 
 
+def make_dataset(enc_seq, dec_in_seq, dec_tgt_seq, batch_size,
+                 shuffle=False, seed=SEED):
+    """Build a tf.data pipeline with optional per-epoch shuffling."""
+    dataset = tf.data.Dataset.from_tensor_slices(((enc_seq, dec_in_seq), dec_tgt_seq))
+    if shuffle:
+        dataset = dataset.shuffle(
+            buffer_size=len(enc_seq),
+            seed=seed,
+            reshuffle_each_iteration=True
+        )
+    return dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+
 # =============================================================================
 #  6. GREEDY INFERENCE
 # =============================================================================
@@ -279,9 +361,8 @@ def translate(sentence, encoder_model, decoder_model,
     seq = tf.constant(
         pad_sequences(seq, maxlen=encoder_model.input_shape[1], padding='post')
     )
-    states = encoder_model(seq, training=False)
-    # encoder returns [state_h, state_c]
-    states = list(states) if not isinstance(states, list) else states
+    enc_outputs, state_h, state_c = encoder_model(seq, training=False)
+    states = [state_h, state_c]
 
     # start token
     start_idx = eng_tok.word_index.get(START_TOKEN, 1)
@@ -291,7 +372,7 @@ def translate(sentence, encoder_model, decoder_model,
     decoded_tokens = []
 
     for _ in range(max_dec_len):
-        output, h, c = decoder_model([target_seq] + states, training=False)
+        output, h, c = decoder_model([target_seq, enc_outputs] + states, training=False)
         token_idx = int(tf.argmax(output[0, -1, :]))
         if token_idx == end_idx or token_idx == 0:
             break
@@ -405,14 +486,31 @@ if __name__ == '__main__':
     ben_sents, eng_sents = preprocess(raw_pairs)
     print(f"    {len(ben_sents):,} valid pairs after cleaning")
 
-    # ── 3. Train / test split (70 / 30) ──────────────────────────────────────
-    print(f"\n[3] Splitting data (test = {int(TEST_SIZE*100)}%) ...")
-    (ben_train, ben_test,
-     eng_train, eng_test) = train_test_split(
-        ben_sents, eng_sents,
-        test_size=TEST_SIZE, random_state=42
+    # ── 3. Shuffle + train / val / test split ────────────────────────────────
+    print(f"\n[3] Shuffling sentence pairs before splitting ...")
+    ben_sents, eng_sents = shuffle_parallel(ben_sents, eng_sents, seed=SEED)
+
+    print(f"    Splitting data (test = {int(TEST_SIZE*100)}%, val = {int(VAL_SIZE*100)}% of train) ...")
+    all_buckets = length_buckets(ben_sents, eng_sents)
+    (ben_train_full, ben_test,
+     eng_train_full, eng_test,
+     train_buckets, _) = train_test_split(
+        ben_sents, eng_sents, all_buckets,
+        test_size=TEST_SIZE,
+        random_state=SEED,
+        stratify=all_buckets,
+        shuffle=True
     )
-    print(f"    Train: {len(ben_train):,}  |  Test: {len(ben_test):,}")
+
+    (ben_train, ben_val,
+     eng_train, eng_val) = train_test_split(
+        ben_train_full, eng_train_full,
+        test_size=VAL_SIZE,
+        random_state=SEED,
+        stratify=train_buckets,
+        shuffle=True
+    )
+    print(f"    Train: {len(ben_train):,}  |  Val: {len(ben_val):,}  |  Test: {len(ben_test):,}")
 
     # ── 4. Tokenise ───────────────────────────────────────────────────────────
     print("\n[4] Building tokenisers ...")
@@ -435,8 +533,13 @@ if __name__ == '__main__':
         ben_tok.texts_to_sequences(ben_train), maxlen=max_enc, padding='post')
     dec_train_seq = pad_sequences(
         eng_tok.texts_to_sequences(eng_train), maxlen=max_dec, padding='post')
+    enc_val_seq = pad_sequences(
+        ben_tok.texts_to_sequences(ben_val), maxlen=max_enc, padding='post')
+    dec_val_seq = pad_sequences(
+        eng_tok.texts_to_sequences(eng_val), maxlen=max_dec, padding='post')
 
     dec_in_train, dec_tgt_train = make_decoder_targets(dec_train_seq)
+    dec_in_val, dec_tgt_val = make_decoder_targets(dec_val_seq)
 
     # ── 6. Build model ────────────────────────────────────────────────────────
     print("\n[6] Building seq2seq model ...")
@@ -445,14 +548,33 @@ if __name__ == '__main__':
 
     # ── 7. Train ──────────────────────────────────────────────────────────────
     print(f"\n[7] Training for {EPOCHS} epochs (batch={BATCH_SIZE}) ...")
-    history = training_model.fit(
-        [enc_train_seq, dec_in_train],
-        dec_tgt_train,
-        epochs=EPOCHS,
-        batch_size=BATCH_SIZE,
-        validation_split=0.1,
-        verbose=1
+    train_ds = make_dataset(
+        enc_train_seq, dec_in_train, dec_tgt_train,
+        batch_size=BATCH_SIZE, shuffle=True, seed=SEED
     )
+    val_ds = make_dataset(
+        enc_val_seq, dec_in_val, dec_tgt_val,
+        batch_size=BATCH_SIZE, shuffle=False, seed=SEED
+    )
+    callbacks = [
+        EarlyStopping(
+            monitor='val_loss',
+            patience=6,
+            restore_best_weights=True,
+            verbose=1
+        ),
+        ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=3,
+            min_lr=1e-5,
+            verbose=1
+        ),
+    ]
+    history = training_model.fit(train_ds, epochs=EPOCHS,
+                                 validation_data=val_ds,
+                                 callbacks=callbacks,
+                                 verbose=1)
 
     # ── 8. Example translations ───────────────────────────────────────────────
     # Bengali input sentences with their known English meanings
@@ -516,13 +638,12 @@ if __name__ == '__main__':
     print(f"  Epochs                      : {EPOCHS}")
     print("=" * 70)
     print("\nArchitecture justification:")
-    print("  Single-layer LSTM encoder/decoder: the corpus has only ~5 000")
-    print("  training pairs with short sentences (avg < 8 tokens). Stacking")
-    print("  LSTM layers would add parameters without enough data to train")
-    print("  them, risking overfitting. One layer per side is sufficient to")
-    print("  capture the sentence-level context needed for this dataset.")
-    print("  256 units: smallest power-of-two that handles Bengali morphology")
-    print("  (rich suffixing); 64-dim embeddings match vocabulary sizes < 5K.")
-    print("  Bengali → English is slightly easier than the reverse because")
-    print("  English output has a smaller, more regular vocabulary.")
+    print("  Bidirectional encoder + additive attention: the plain seq2seq")
+    print("  model was generating fluent but semantically wrong English.")
+    print("  Attention lets the decoder focus on relevant Bengali words")
+    print("  during each output step, which is more suitable for translation.")
+    print("  Dropout, gradient clipping, learning-rate reduction, and early")
+    print("  stopping are used to control overfitting on this small corpus.")
+    print("  256 decoder units and 64-dim embeddings remain compact enough")
+    print("  for the dataset while still modeling short multi-word inputs.")
     print("=" * 70)

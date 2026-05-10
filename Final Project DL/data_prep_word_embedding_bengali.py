@@ -1,6 +1,6 @@
 # =============================================================================
 #  WORD EMBEDDING IN NLP — Bengali Only
-#  STEP 5: Assess the Model (Bengali)
+#  TASKS 2.1 & 2.2: Data Preparation + Word Embedding (Bengali)
 #
 #  Trains a CBOW word embedding model on the BENGALI sentences only from
 #  the English-Bengali parallel corpus.  All query words, nearest neighbours,
@@ -15,7 +15,7 @@
 #  DATA:    ben-eng/ben.txt   (column 1 = Bengali sentences only)
 #
 #  HOW TO RUN:
-#    python step5_bengali.py
+#    python data_prep_word_embedding_bengali.py
 #
 #  OUTPUT (saved to same folder as this script):
 #    ben_pca_all_words.png         — PCA scatter of entire Bengali vocabulary
@@ -191,7 +191,7 @@ def build_and_train(sentences):
 
 
 # =============================================================================
-#  STEP 5 — Helpers
+#  WORD EMBEDDING HELPERS
 # =============================================================================
 
 def get_embeddings(model, tokenizer):
@@ -422,7 +422,7 @@ if __name__ == '__main__':
     }
 
     print("=" * 65)
-    print("STEP 5 — BENGALI WORD EMBEDDING MODEL")
+    print("TASKS 2.1 & 2.2 — BENGALI DATA PREP + WORD EMBEDDING")
     print("  Training on Bengali sentences only")
     print("=" * 65)
 
