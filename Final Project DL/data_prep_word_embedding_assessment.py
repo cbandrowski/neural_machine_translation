@@ -1,6 +1,6 @@
 # =============================================================================
 #  WORD EMBEDDING IN NLP — English–Bengali Parallel Corpus
-#  STEP 5: Assess the Model
+#  TASKS 2.1 & 2.2: Data Preparation + Word Embedding Assessment
 #
 #  DATA:  ben-eng/ben.txt  (tab-separated: English \t Bengali \t [ignored])
 #
@@ -17,9 +17,9 @@
 #      sudo apt install fonts-noto-cjk   OR   pip install matplotlib-fontja
 #
 #  OUTPUT:
-#    step5_pca_all_words.png       — PCA scatter of entire vocabulary
-#    step5_pca_top_words.png       — PCA scatter of top 50 words, labelled
-#    step5_nearest_neighbours.png  — nearest-neighbour bar charts, split by
+#    word_embedding_pca_all_words.png       — PCA scatter of entire vocabulary
+#    word_embedding_pca_top_words.png       — PCA scatter of top 50 words, labelled
+#    word_embedding_nearest_neighbours.png  — nearest-neighbour bar charts, split by
 #                                    language (English | Bengali side-by-side)
 # =============================================================================
 
@@ -128,9 +128,9 @@ def setup_bengali_font():
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
 
-OUT_PCA_ALL = os.path.join(BASE_DIR, "step5_pca_all_words.png")
-OUT_PCA_TOP = os.path.join(BASE_DIR, "step5_pca_top_words.png")
-OUT_NEAREST = os.path.join(BASE_DIR, "step5_nearest_neighbours.png")
+OUT_PCA_ALL = os.path.join(BASE_DIR, "word_embedding_pca_all_words.png")
+OUT_PCA_TOP = os.path.join(BASE_DIR, "word_embedding_pca_top_words.png")
+OUT_NEAREST = os.path.join(BASE_DIR, "word_embedding_nearest_neighbours.png")
 
 
 # =============================================================================
@@ -218,7 +218,7 @@ def build_and_train(sentences):
 
 
 # =============================================================================
-#  STEP 5 — Helpers
+#  WORD EMBEDDING HELPERS
 # =============================================================================
 
 def get_embeddings(model, tokenizer):
@@ -480,7 +480,7 @@ if __name__ == '__main__':
     QUERY_WORDS = ENG_QUERY_WORDS + BEN_QUERY_WORDS
 
     print("=" * 65)
-    print("STEP 5 — ASSESS THE WORD EMBEDDING MODEL")
+    print("TASKS 2.1 & 2.2 — WORD EMBEDDING ASSESSMENT")
     print("  Data: English-Bengali Parallel Corpus (ben.txt)")
     print("=" * 65)
 
@@ -542,8 +542,8 @@ if __name__ == '__main__':
     print("\n  Plot B — PCA top 50 words:")
     plot_pca_top_words(embeddings, tokenizer, OUT_PCA_TOP, font_prop, top_n=50)
 
-    OUT_NEAREST_ENG = os.path.join(BASE_DIR, "step5_nearest_neighbours_english.png")
-    OUT_NEAREST_BEN = os.path.join(BASE_DIR, "step5_nearest_neighbours_bengali.png")
+    OUT_NEAREST_ENG = os.path.join(BASE_DIR, "word_embedding_nearest_neighbours_english.png")
+    OUT_NEAREST_BEN = os.path.join(BASE_DIR, "word_embedding_nearest_neighbours_bengali.png")
 
     print("\n  Plot C1 — English query words nearest neighbours:")
     plot_nearest_neighbours(embeddings, tokenizer, ENG_QUERY_WORDS, OUT_NEAREST_ENG,
@@ -555,8 +555,8 @@ if __name__ == '__main__':
 
     print("\n" + "=" * 65)
     print("Step 5 complete. Files saved:")
-    print(f"  1. step5_pca_all_words.png")
-    print(f"  2. step5_pca_top_words.png")
-    print(f"  3. step5_nearest_neighbours_english.png  (English query words)")
-    print(f"  4. step5_nearest_neighbours_bengali.png  (Bengali query words)")
+    print(f"  1. word_embedding_pca_all_words.png")
+    print(f"  2. word_embedding_pca_top_words.png")
+    print(f"  3. word_embedding_nearest_neighbours_english.png  (English query words)")
+    print(f"  4. word_embedding_nearest_neighbours_bengali.png  (Bengali query words)")
     print("=" * 65)

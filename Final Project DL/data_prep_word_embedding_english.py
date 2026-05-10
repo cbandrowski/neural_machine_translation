@@ -1,6 +1,6 @@
 # =============================================================================
 #  WORD EMBEDDING IN NLP — English Only
-#  STEP 5: Assess the Model (English)
+#  TASKS 2.1 & 2.2: Data Preparation + Word Embedding (English)
 #
 #  Trains a CBOW word embedding model on the ENGLISH sentences only from
 #  the English-Bengali parallel corpus.  All query words, nearest neighbours,
@@ -9,7 +9,7 @@
 #  DATA:    ben-eng/ben.txt   (column 0 = English sentences only)
 #
 #  HOW TO RUN:
-#    python step5_english.py
+#    python data_prep_word_embedding_english.py
 #
 #  OUTPUT (saved to same folder as this script):
 #    eng_pca_all_words.png         — PCA scatter of entire English vocabulary
@@ -129,7 +129,7 @@ def build_and_train(sentences):
 
 
 # =============================================================================
-#  STEP 5 — Helpers
+#  WORD EMBEDDING HELPERS
 # =============================================================================
 
 def get_embeddings(model, tokenizer):
@@ -325,7 +325,7 @@ if __name__ == '__main__':
     ]
 
     print("=" * 65)
-    print("STEP 5 — ENGLISH WORD EMBEDDING MODEL")
+    print("TASKS 2.1 & 2.2 — ENGLISH DATA PREP + WORD EMBEDDING")
     print("  Training on English sentences only")
     print("=" * 65)
 
