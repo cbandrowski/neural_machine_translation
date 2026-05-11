@@ -1,0 +1,14 @@
+{
+  "total_raw_pairs": 2753069,
+  "empty_after_cleaning": 102449,
+  "filtered_by_length_or_ratio": 402337,
+  "exact_duplicate_pairs": 327144,
+  "eligible_unique_pairs": 1921139,
+  "sample_size": 100000,
+  "english_vocab_size": 57174,
+  "bengali_vocab_size": 89604,
+  "english_avg_tokens": 9.065,
+  "bengali_avg_tokens": 8.576,
+  "english_max_tokens": 25,
+  "bengali_max_tokens": 25
+}

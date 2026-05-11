@@ -1,0 +1,32 @@
+i
+  aishwarya	0.8074
+  she	0.8009
+  langdon	0.7908
+  you	0.7835
+  he	0.7796
+  theyll	0.7776
+
+you
+  we	0.8756
+  theyll	0.8708
+  they	0.8530
+  swan	0.8521
+  hed	0.8207
+  dont	0.8173
+
+he
+  she	0.9257
+  langdon	0.8057
+  i	0.7796
+  apparently	0.7494
+  anyhow	0.7440
+  eyeing	0.7300
+
+she
+  he	0.9257
+  langdon	0.8800
+  apparently	0.8476
+  baksh	0.8150
+  karaites	0.8111
+  attacker	0.8049
+
