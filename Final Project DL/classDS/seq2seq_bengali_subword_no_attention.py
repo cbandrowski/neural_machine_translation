@@ -1,10 +1,9 @@
 # =============================================================================
-#  TRANSLATION WITH SEQ2SEQ LSTM — Bengali → English (Subword + Attention)
+#  TRANSLATION WITH SEQ2SEQ LSTM — Bengali → English (Subword, No Attention)
 #
 #  This script keeps the assignment's LSTM seq2seq requirement, but switches
-#  from word-level tokenisation to corpus-trained WordPiece subwords and uses
-#  beam search decoding. This improves coverage of rare forms and reduces the
-#  tendency to memorize a few frequent whole-sentence templates.
+#  from word-level tokenisation to corpus-trained WordPiece subwords. This is
+#  the no-attention baseline for comparing against the subword attention model.
 #
 #  DATA:    ben-eng/ben.txt   (col 0 = English, col 1 = Bengali)
 #  SPLIT:   Source-level 70 % train, 7 % val, 30 % test
@@ -15,7 +14,8 @@
 #  OUTPUT:
 #    ben_subword_seq2seq_training_curve.png
 #    ben_subword_seq2seq_bleu_histogram.png
-#    ben_subword_attention_heatmap.png
+#    subword_based_ben_seq2seq_no_attention_training_curve.png
+#    subword_based_ben_seq2seq_no_attention_bleu_histogram.png
 # =============================================================================
 
 import os
@@ -36,7 +36,7 @@ import matplotlib.font_manager as fm
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
-    Input, Embedding, LSTM, Dense, Bidirectional, AdditiveAttention, Concatenate
+    Input, Embedding, LSTM, Dense, Bidirectional, Concatenate
 )
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from sklearn.model_selection import train_test_split
@@ -56,9 +56,8 @@ SEED = 42
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
 OUT_DIR = os.path.join(os.path.dirname(BASE_DIR), "output", "subword_based")
-OUT_CURVE = os.path.join(OUT_DIR, "subword_based_ben_seq2seq_attention_training_curve.png")
-OUT_BLEU_HIST = os.path.join(OUT_DIR, "subword_based_ben_seq2seq_attention_bleu_histogram.png")
-OUT_ATTN = os.path.join(OUT_DIR, "subword_based_ben_seq2seq_attention_heatmap.png")
+OUT_CURVE = os.path.join(OUT_DIR, "subword_based_ben_seq2seq_no_attention_training_curve.png")
+OUT_BLEU_HIST = os.path.join(OUT_DIR, "subword_based_ben_seq2seq_no_attention_bleu_histogram.png")
 EXPERIMENT_LOG = os.path.join(OUT_DIR, "subword_based_SEQ2SEQ_EXPERIMENT_LOG.md")
 DATA_STATS_JSON = os.path.join(OUT_DIR, "subword_based_data_stats.json")
 BLEU_JSON = os.path.join(OUT_DIR, "subword_based_bleu_results.json")
@@ -320,9 +319,6 @@ def build_model(enc_vocab, dec_vocab):
         recurrent_dropout=RECURRENT_DROPOUT,
         name='dec_lstm',
     )
-    attention_layer = AdditiveAttention(name='attention')
-    concat_layer = Concatenate(axis=-1, name='context_concat')
-    proj_layer = Dense(LSTM_UNITS, activation='tanh', name='context_projection')
     dec_dense = Dense(dec_vocab, activation='softmax', name='dec_output')
 
     enc_in = Input(shape=(None,), name='encoder_input')
@@ -335,10 +331,7 @@ def build_model(enc_vocab, dec_vocab):
     dec_in = Input(shape=(None,), name='decoder_input')
     dec_emb = dec_emb_layer(dec_in)
     dec_out_seq, _, _ = dec_lstm_layer(dec_emb, initial_state=enc_states)
-    context_seq = attention_layer([dec_out_seq, enc_out_seq])
-    dec_context = concat_layer([dec_out_seq, context_seq])
-    dec_context = proj_layer(dec_context)
-    dec_out = dec_dense(dec_context)
+    dec_out = dec_dense(dec_out_seq)
 
     training_model = Model([enc_in, dec_in], dec_out)
     training_model.compile(
@@ -348,26 +341,19 @@ def build_model(enc_vocab, dec_vocab):
         weighted_metrics=[],
     )
 
-    encoder_model = Model(enc_in, [enc_out_seq] + enc_states)
+    encoder_model = Model(enc_in, enc_states)
 
     dec_state_h_in = Input(shape=(LSTM_UNITS,), name='dec_state_h_in')
     dec_state_c_in = Input(shape=(LSTM_UNITS,), name='dec_state_c_in')
-    enc_out_in = Input(shape=(None, LSTM_UNITS), name='enc_out_in')
     dec_states_in = [dec_state_h_in, dec_state_c_in]
 
     dec_single_emb = dec_emb_layer(dec_in)
     dec_single_out, h, c = dec_lstm_layer(dec_single_emb, initial_state=dec_states_in)
-    context_single, attention_scores = attention_layer(
-        [dec_single_out, enc_out_in],
-        return_attention_scores=True,
-    )
-    dec_single_context = concat_layer([dec_single_out, context_single])
-    dec_single_context = proj_layer(dec_single_context)
-    dec_single_dense = dec_dense(dec_single_context)
+    dec_single_dense = dec_dense(dec_single_out)
 
     decoder_model = Model(
-        [dec_in, enc_out_in] + dec_states_in,
-        [dec_single_dense, h, c, attention_scores],
+        [dec_in] + dec_states_in,
+        [dec_single_dense, h, c],
     )
 
     return training_model, encoder_model, decoder_model
@@ -382,11 +368,10 @@ def beam_search_translate(
     max_dec_len,
     beam_width=BEAM_WIDTH,
     alpha=LENGTH_PENALTY_ALPHA,
-    return_attention=False,
 ):
     clean_sentence = clean_bengali(sentence)
     seq = tf.constant([src_tok.encode_ids(clean_sentence)], dtype=tf.int32)
-    enc_outputs, state_h, state_c = encoder_model(seq, training=False)
+    state_h, state_c = encoder_model(seq, training=False)
 
     def length_penalty(length):
         return ((5.0 + length) / 6.0) ** alpha
@@ -396,7 +381,6 @@ def beam_search_translate(
         'score': 0.0,
         'state_h': state_h,
         'state_c': state_c,
-        'attn': [],
         'finished': False,
     }]
 
@@ -408,12 +392,11 @@ def beam_search_translate(
                 continue
 
             target_seq = tf.constant([[beam['ids'][-1]]], dtype=tf.int32)
-            probs, next_h, next_c, attn_scores = decoder_model(
-                [target_seq, enc_outputs, beam['state_h'], beam['state_c']],
+            probs, next_h, next_c = decoder_model(
+                [target_seq, beam['state_h'], beam['state_c']],
                 training=False,
             )
             probs = probs[0, -1, :].numpy()
-            attn_vector = attn_scores.numpy()[0, 0, :]
             top_ids = np.argsort(probs)[-beam_width:][::-1]
 
             for token_id in top_ids:
@@ -427,7 +410,6 @@ def beam_search_translate(
                     'score': new_score,
                     'state_h': next_h,
                     'state_c': next_c,
-                    'attn': beam['attn'] + [attn_vector],
                     'finished': new_finished,
                 })
 
@@ -451,10 +433,6 @@ def beam_search_translate(
     ]
     text = tgt_tok.decode_ids(decoded_ids)
 
-    if return_attention:
-        src_tokens = src_tok.encode_tokens(clean_sentence)
-        tgt_tokens = [tgt_tok.token_for_id(i) for i in decoded_ids]
-        return text, np.array(best['attn']), src_tokens, tgt_tokens
     return text
 
 
@@ -494,13 +472,13 @@ def write_experiment_log(
 
 Tokenization: WordPiece subword tokenization.
 
-## Bengali to English, subword attention LSTM
+## Bengali to English, subword no-attention LSTM
 
-- Script: `classDS/seq2seq_bengali_subword.py`
+- Script: `classDS/seq2seq_bengali_subword_no_attention.py`
 - Tokenization: subword-based WordPiece
 - Direction: Bengali -> English
 - Split: length-stratified; 70% train, 30% test; 10% of training portion used for validation
-- Model: bidirectional LSTM encoder + additive attention + LSTM decoder
+- Model: bidirectional LSTM encoder + LSTM decoder, no attention
 - Embedding dimension: {EMBEDDING_DIM}
 - Training pairs: {train_count:,}
 - Validation pairs: {val_count:,}
@@ -515,7 +493,6 @@ Tokenization: WordPiece subword tokenization.
 - Beam corpus BLEU-4: {beam_bleu:.4f}
 - Beam mean sentence BLEU: {beam_mean:.4f}
 - Beam median sentence BLEU: {beam_median:.4f}
-- Attention heatmap: `subword_based_ben_seq2seq_attention_heatmap.png`
 """
     with open(EXPERIMENT_LOG, "a", encoding="utf-8") as f:
         f.write(entry)
@@ -570,10 +547,10 @@ def write_bleu_json(
             "models": {},
         }
 
-    payload["models"]["attention"] = {
+    payload["models"]["no_attention"] = {
         "status": "complete",
-        "script": "classDS/seq2seq_bengali_subword.py",
-        "architecture": "bidirectional LSTM encoder + additive attention + LSTM decoder",
+        "script": "classDS/seq2seq_bengali_subword_no_attention.py",
+        "architecture": "bidirectional LSTM encoder + LSTM decoder, no attention",
         "split": "length-stratified",
         "train_pairs": train_count,
         "validation_pairs": val_count,
@@ -622,7 +599,7 @@ def plot_training_curve(history, save_path):
     ax2.grid(True, alpha=0.3)
     ax2.spines[['top', 'right']].set_visible(False)
 
-    plt.suptitle('Subword-Based Attention Seq2Seq LSTM - Bengali -> English', fontsize=13, fontweight='bold')
+    plt.suptitle('Subword-Based No-Attention Seq2Seq LSTM - Bengali -> English', fontsize=13, fontweight='bold')
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()
@@ -639,7 +616,7 @@ def plot_bleu_histogram(per_sentence_bleus, save_path):
         linewidth=1.8,
         label=f'Mean = {np.mean(per_sentence_bleus):.4f}',
     )
-    ax.set_title('Subword-Based Attention BLEU Distribution (Test Set)', fontweight='bold')
+    ax.set_title('Subword-Based No-Attention BLEU Distribution (Test Set)', fontweight='bold')
     ax.set_xlabel('Sentence BLEU')
     ax.set_ylabel('Count')
     ax.legend()
@@ -651,32 +628,9 @@ def plot_bleu_histogram(per_sentence_bleus, save_path):
     print(f"  Saved -> {save_path}")
 
 
-def plot_attention_heatmap(attn_matrix, src_tokens, tgt_tokens, save_path, font_prop=None):
-    if attn_matrix.size == 0 or not src_tokens or not tgt_tokens:
-        print("  Skipping attention heatmap: no attention weights available.")
-        return
-
-    fig_w = max(8, 0.6 * len(src_tokens))
-    fig_h = max(4, 0.5 * len(tgt_tokens))
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-    im = ax.imshow(attn_matrix[:len(tgt_tokens), :len(src_tokens)], aspect='auto', cmap='magma')
-    ax.set_xticks(range(len(src_tokens)))
-    ax.set_xticklabels(src_tokens, rotation=45, ha='right', fontproperties=font_prop)
-    ax.set_yticks(range(len(tgt_tokens)))
-    ax.set_yticklabels(tgt_tokens)
-    ax.set_xlabel('Bengali source subwords', fontweight='bold')
-    ax.set_ylabel('English target subwords', fontweight='bold')
-    ax.set_title('Subword-Based Attention Heatmap: Bengali -> English', fontweight='bold')
-    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02)
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    print(f"  Saved -> {save_path}")
-
-
 if __name__ == '__main__':
     print("=" * 70)
-    print("  SEQ2SEQ LSTM  —  Bengali → English Translation (Subword)")
+    print("  SEQ2SEQ LSTM  -  Bengali -> English Translation (Subword, No Attention)")
     print("=" * 70)
 
     print("\n[0] Setting up Bengali font ...")
@@ -842,18 +796,6 @@ if __name__ == '__main__':
         beam_median=float(np.median(beam_per_sent_bleus)),
     )
     print(f"  Saved BLEU JSON -> {BLEU_JSON}")
-
-    heatmap_source = 'তুমি কি আমাকে সাহায্য করতে পারবে?'
-    _, attn_matrix, src_tokens, tgt_tokens = beam_search_translate(
-        heatmap_source,
-        encoder_model,
-        decoder_model,
-        src_tok,
-        tgt_tok,
-        max_dec,
-        return_attention=True,
-    )
-    plot_attention_heatmap(attn_matrix, src_tokens, tgt_tokens, OUT_ATTN, font_prop=font_prop)
 
     print("\n" + "=" * 70)
     print("  Results Summary")

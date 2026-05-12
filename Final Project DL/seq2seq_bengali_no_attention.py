@@ -26,7 +26,7 @@
 #    word_based_ben_seq2seq_no_attention_bleu_histogram.png
 # =============================================================================
 
-import os, re, sys, warnings
+import json, os, re, sys, warnings
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 if hasattr(sys.stdout, "reconfigure"):
@@ -62,9 +62,12 @@ SEED = 42
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH        = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
-OUT_CURVE       = os.path.join(BASE_DIR, "word_based_ben_seq2seq_no_attention_training_curve.png")
-OUT_BLEU_HIST   = os.path.join(BASE_DIR, "word_based_ben_seq2seq_no_attention_bleu_histogram.png")
-EXPERIMENT_LOG  = os.path.join(BASE_DIR, "word_based_SEQ2SEQ_EXPERIMENT_LOG.md")
+OUT_DIR         = os.path.join(BASE_DIR, "output", "word_based")
+OUT_CURVE       = os.path.join(OUT_DIR, "word_based_ben_seq2seq_no_attention_training_curve.png")
+OUT_BLEU_HIST   = os.path.join(OUT_DIR, "word_based_ben_seq2seq_no_attention_bleu_histogram.png")
+EXPERIMENT_LOG  = os.path.join(OUT_DIR, "word_based_SEQ2SEQ_EXPERIMENT_LOG.md")
+BLEU_JSON       = os.path.join(OUT_DIR, "word_based_bleu_results.json")
+os.makedirs(OUT_DIR, exist_ok=True)
 
 # =============================================================================
 #  HYPER-PARAMETERS  (minimal / justified above)
@@ -514,6 +517,49 @@ def append_experiment_log(
         f.write(entry)
 
 
+def update_bleu_json(
+    train_count, val_count, test_count, enc_vocab, dec_vocab,
+    greedy_bleu, greedy_mean, greedy_median,
+    beam_bleu, beam_mean, beam_median,
+):
+    if os.path.exists(BLEU_JSON):
+        with open(BLEU_JSON, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    else:
+        payload = {
+            "tokenization": "word_based",
+            "direction": "Bengali -> English",
+            "models": {},
+        }
+
+    payload["models"]["no_attention"] = {
+        "status": "complete",
+        "script": "seq2seq_bengali_no_attention.py",
+        "architecture": "bidirectional LSTM encoder + LSTM decoder, no attention",
+        "split": SPLIT_MODE,
+        "train_pairs": train_count,
+        "validation_pairs": val_count,
+        "test_pairs": test_count,
+        "encoder_vocab": enc_vocab,
+        "decoder_vocab": dec_vocab,
+        "greedy": {
+            "corpus_bleu_4": round(float(greedy_bleu), 4),
+            "mean_sentence_bleu": round(float(greedy_mean), 4),
+            "median_sentence_bleu": round(float(greedy_median), 4),
+        },
+        "beam": {
+            "beam_width": BEAM_WIDTH,
+            "corpus_bleu_4": round(float(beam_bleu), 4),
+            "mean_sentence_bleu": round(float(beam_mean), 4),
+            "median_sentence_bleu": round(float(beam_median), 4),
+        },
+    }
+
+    with open(BLEU_JSON, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
 # =============================================================================
 #  8. PLOTS
 # =============================================================================
@@ -539,6 +585,8 @@ def plot_training_curve(history, save_path):
 
     plt.suptitle('Seq2Seq LSTM Baseline  —  Bengali → English', fontsize=13,
                  fontweight='bold')
+    plt.suptitle('Word-Based No-Attention Seq2Seq LSTM - Bengali -> English', fontsize=13,
+                 fontweight='bold')
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()
@@ -550,7 +598,7 @@ def plot_bleu_histogram(per_sentence_bleus, save_path):
     ax.hist(per_sentence_bleus, bins=30, color='#e15759', edgecolor='white', alpha=0.85)
     ax.axvline(np.mean(per_sentence_bleus), color='#4e79a7', linestyle='--',
                linewidth=1.8, label=f'Mean = {np.mean(per_sentence_bleus):.4f}')
-    ax.set_title('Per-Sentence BLEU Distribution (Test Set)', fontweight='bold')
+    ax.set_title('Word-Based No-Attention BLEU Distribution (Test Set)', fontweight='bold')
     ax.set_xlabel('Sentence BLEU'); ax.set_ylabel('Count')
     ax.legend(); ax.grid(True, alpha=0.3)
     ax.spines[['top', 'right']].set_visible(False)
@@ -751,6 +799,20 @@ if __name__ == '__main__':
         beam_median=float(np.median(beam_per_sent_bleus)),
     )
     print(f"  Appended experiment details -> {EXPERIMENT_LOG}")
+    update_bleu_json(
+        train_count=len(ben_train),
+        val_count=len(ben_val),
+        test_count=len(ben_test),
+        enc_vocab=enc_vocab,
+        dec_vocab=dec_vocab,
+        greedy_bleu=greedy_bleu_score,
+        greedy_mean=float(np.mean(greedy_per_sent_bleus)),
+        greedy_median=float(np.median(greedy_per_sent_bleus)),
+        beam_bleu=beam_bleu_score,
+        beam_mean=float(np.mean(beam_per_sent_bleus)),
+        beam_median=float(np.median(beam_per_sent_bleus)),
+    )
+    print(f"  Updated BLEU JSON -> {BLEU_JSON}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print("\n" + "=" * 70)

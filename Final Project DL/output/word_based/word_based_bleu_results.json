@@ -1,0 +1,39 @@
+{
+  "tokenization": "word_based",
+  "direction": "Bengali -> English",
+  "models": {
+    "attention": {
+      "status": "complete",
+      "script": "seq2seq_bengali.py",
+      "architecture": "bidirectional LSTM encoder + additive attention + LSTM decoder",
+      "greedy": {
+        "corpus_bleu_4": 0.1495,
+        "mean_sentence_bleu": 0.1593,
+        "median_sentence_bleu": 0.0803
+      },
+      "beam": {
+        "beam_width": 3,
+        "corpus_bleu_4": 0.1605,
+        "mean_sentence_bleu": 0.1678,
+        "median_sentence_bleu": 0.0803
+      }
+    },
+    "no_attention": {
+      "status": "complete",
+      "script": "seq2seq_bengali_no_attention.py",
+      "architecture": "bidirectional LSTM encoder + LSTM decoder, no attention",
+      "greedy": {
+        "corpus_bleu_4": 0.1476,
+        "mean_sentence_bleu": 0.1578,
+        "median_sentence_bleu": 0.0803
+      },
+      "beam": {
+        "beam_width": 3,
+        "corpus_bleu_4": 0.1556,
+        "mean_sentence_bleu": 0.1662,
+        "median_sentence_bleu": 0.0803
+      }
+    }
+  },
+  "notes": "These are the last recorded aligned word-based Bengali-to-English results. Re-running the scripts will overwrite this file with fresh results."
+}

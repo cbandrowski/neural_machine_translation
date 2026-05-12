@@ -1,0 +1,41 @@
+{
+  "tokenization": "subword_based",
+  "direction": "Bengali -> English",
+  "models": {
+    "attention": {
+      "status": "pending_rerun_after_alignment",
+      "script": "classDS/seq2seq_bengali_subword.py",
+      "architecture": "bidirectional LSTM encoder + additive attention + LSTM decoder",
+      "greedy": {
+        "corpus_bleu_4": null,
+        "mean_sentence_bleu": null,
+        "median_sentence_bleu": null
+      },
+      "beam": {
+        "beam_width": 3,
+        "length_penalty_alpha": 0.7,
+        "corpus_bleu_4": null,
+        "mean_sentence_bleu": null,
+        "median_sentence_bleu": null
+      }
+    },
+    "no_attention": {
+      "status": "pending_rerun_after_implementation",
+      "script": "classDS/seq2seq_bengali_subword_no_attention.py",
+      "architecture": "bidirectional LSTM encoder + LSTM decoder, no attention",
+      "greedy": {
+        "corpus_bleu_4": null,
+        "mean_sentence_bleu": null,
+        "median_sentence_bleu": null
+      },
+      "beam": {
+        "beam_width": 3,
+        "length_penalty_alpha": 0.7,
+        "corpus_bleu_4": null,
+        "mean_sentence_bleu": null,
+        "median_sentence_bleu": null
+      }
+    }
+  },
+  "notes": "Both subword attention and subword no-attention scripts now write this JSON when rerun. Values are null until the aligned training runs finish."
+}

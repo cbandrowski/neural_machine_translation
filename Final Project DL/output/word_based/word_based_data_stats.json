@@ -1,0 +1,12 @@
+{
+  "tokenization": "word_based",
+  "total_pairs": 7030,
+  "english_tokens": 34816,
+  "bengali_tokens": 32860,
+  "unique_english_words": 2770,
+  "unique_bengali_words": 4632,
+  "avg_english_words_per_sentence": 4.95,
+  "avg_bengali_words_per_sentence": 4.67,
+  "max_english_words": 20,
+  "max_bengali_words": 18
+}

@@ -51,9 +51,11 @@ tf.random.set_seed(42)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
 
-OUT_PCA_ALL = os.path.join(BASE_DIR, "word_based_eng_pca_all_words.png")
-OUT_PCA_TOP = os.path.join(BASE_DIR, "word_based_eng_pca_top_words.png")
-OUT_NEAREST = os.path.join(BASE_DIR, "word_based_eng_nearest_neighbours.png")
+OUT_DIR = os.path.join(BASE_DIR, "output", "word_based")
+OUT_PCA_ALL = os.path.join(OUT_DIR, "word_based_eng_pca_all_words.png")
+OUT_PCA_TOP = os.path.join(OUT_DIR, "word_based_eng_pca_top_words.png")
+OUT_NEAREST = os.path.join(OUT_DIR, "word_based_eng_nearest_neighbours.png")
+os.makedirs(OUT_DIR, exist_ok=True)
 
 
 # =============================================================================
@@ -191,6 +193,9 @@ def plot_pca_all_words(embeddings, tokenizer, save_path):
     ax.set_title("Word Embeddings — PCA (All English Words)\n"
                  "English-Bengali Parallel Corpus  ·  English CBOW Model",
                  fontsize=13, fontweight='bold')
+    ax.set_title("Word-Based Word Embeddings - PCA (All English Words)\n"
+                 "English-Bengali Parallel Corpus - English CBOW Model",
+                 fontsize=13, fontweight='bold')
     ax.set_xlabel("PCA Component 1", fontsize=10)
     ax.set_ylabel("PCA Component 2", fontsize=10)
     ax.grid(True, alpha=0.2)
@@ -248,11 +253,19 @@ def plot_pca_top_words(embeddings, tokenizer, save_path, top_n=50):
     ax.set_title(f"Word Embeddings — PCA (Top {top_n} English Words)\n"
                  "English-Bengali Parallel Corpus  ·  English CBOW Model",
                  fontsize=13, fontweight='bold')
+    ax.set_title(f"Word-Based Word Embeddings - PCA (Top {top_n} English Words)\n"
+                 "English-Bengali Parallel Corpus - English CBOW Model",
+                 fontsize=13, fontweight='bold')
     ax.set_xlabel("PCA Component 1", fontsize=10)
     ax.set_ylabel("PCA Component 2", fontsize=10)
     ax.grid(True, alpha=0.2)
     ax.spines[['top', 'right']].set_visible(False)
 
+    fig.suptitle(
+        "Word-Based Nearest Neighbours by Cosine Similarity - English Model\n"
+        "English-Bengali Parallel Corpus - English CBOW",
+        fontsize=13, fontweight='bold', color='#1a1209'
+    )
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()

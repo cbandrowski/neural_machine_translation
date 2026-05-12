@@ -8,6 +8,7 @@ charts that can be used in the final report.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import sys
@@ -17,7 +18,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "ben-eng" / "ben.txt"
-OUT_DIR = BASE_DIR / "output" / "data_analysis"
+OUT_DIR = BASE_DIR / "output" / "word_based" / "data_analysis"
+STATS_JSON = BASE_DIR / "output" / "word_based" / "word_based_data_stats.json"
 
 TOP_N = 15
 
@@ -177,8 +179,8 @@ def write_token_vocab_chart(
     svg = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="white"/>',
-        '<text x="450" y="36" text-anchor="middle" font-family="Arial" font-size="22" font-weight="700">Token and Vocabulary Counts</text>',
-        '<text x="450" y="62" text-anchor="middle" font-family="Arial" font-size="13" fill="#555">After lowercasing, punctuation removal, and word tokenization</text>',
+        '<text x="450" y="36" text-anchor="middle" font-family="Arial" font-size="22" font-weight="700">Word-Based Token and Vocabulary Counts</text>',
+        '<text x="450" y="62" text-anchor="middle" font-family="Arial" font-size="13" fill="#555">Word tokenization after lowercasing and punctuation removal</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - 60}" y2="{height - margin_bottom}" stroke="#333"/>',
         f'<line x1="{margin_left}" y1="{chart_top}" x2="{margin_left}" y2="{height - margin_bottom}" stroke="#333"/>',
     ]
@@ -225,8 +227,8 @@ def write_sentence_length_chart(
     svg = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="white"/>',
-        '<text x="450" y="36" text-anchor="middle" font-family="Arial" font-size="22" font-weight="700">Sentence Length Distribution</text>',
-        '<text x="450" y="62" text-anchor="middle" font-family="Arial" font-size="13" fill="#555">Number of sentence pairs by tokenized sentence length</text>',
+        '<text x="450" y="36" text-anchor="middle" font-family="Arial" font-size="22" font-weight="700">Word-Based Sentence Length Distribution</text>',
+        '<text x="450" y="62" text-anchor="middle" font-family="Arial" font-size="13" fill="#555">Number of sentence pairs by word-tokenized sentence length</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - 55}" y2="{height - margin_bottom}" stroke="#333"/>',
         f'<line x1="{margin_left}" y1="{chart_top}" x2="{margin_left}" y2="{height - margin_bottom}" stroke="#333"/>',
         '<rect x="665" y="88" width="16" height="16" fill="#4e79a7"/><text x="688" y="101" font-family="Arial" font-size="13">English</text>',
@@ -385,6 +387,31 @@ def print_report_stats(
     print("\nTop English words after preprocessing:")
     for rank, (word, count) in enumerate(Counter(english_tokens).most_common(TOP_N), start=1):
         print(f"{rank:>2}. {word:<15} {count:>5,}")
+
+
+def write_word_stats_json(
+    total_pairs: int,
+    english_tokens: list[str],
+    bengali_tokens: list[str],
+    english_lengths: list[int],
+    bengali_lengths: list[int],
+) -> None:
+    eng_stats = describe_lengths(english_lengths)
+    ben_stats = describe_lengths(bengali_lengths)
+    payload = {
+        "tokenization": "word_based",
+        "total_pairs": total_pairs,
+        "english_tokens": len(english_tokens),
+        "bengali_tokens": len(bengali_tokens),
+        "unique_english_words": len(set(english_tokens)),
+        "unique_bengali_words": len(set(bengali_tokens)),
+        "avg_english_words_per_sentence": round(eng_stats["mean"], 2),
+        "avg_bengali_words_per_sentence": round(ben_stats["mean"], 2),
+        "max_english_words": int(eng_stats["max"]),
+        "max_bengali_words": int(ben_stats["max"]),
+    }
+    STATS_JSON.parent.mkdir(parents=True, exist_ok=True)
+    STATS_JSON.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print("\nTop Bengali words after preprocessing:")
     for rank, (word, count) in enumerate(Counter(bengali_tokens).most_common(TOP_N), start=1):
         print(f"{rank:>2}. {word:<15} {count:>5,}")
@@ -432,10 +459,18 @@ def main() -> None:
         bengali_vocab_count=len(bengali_counter),
     )
     write_sentence_length_chart(sentence_length_chart, english_lengths, bengali_lengths)
+    write_word_stats_json(
+        total_pairs=len(cleaned_pairs),
+        english_tokens=english_tokens,
+        bengali_tokens=bengali_tokens,
+        english_lengths=english_lengths,
+        bengali_lengths=bengali_lengths,
+    )
 
     print("\nCharts written:")
     print(f"- {token_vocab_chart}")
     print(f"- {sentence_length_chart}")
+    print(f"- {STATS_JSON}")
 
 
 if __name__ == "__main__":

@@ -53,8 +53,10 @@ tf.random.set_seed(42)
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH        = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
-OUT_CURVE       = os.path.join(BASE_DIR, "word_based_seq2seq_eng_to_ben_training_curve.png")
-OUT_BLEU_HIST   = os.path.join(BASE_DIR, "word_based_seq2seq_eng_to_ben_bleu_histogram.png")
+OUT_DIR         = os.path.join(BASE_DIR, "output", "word_based")
+OUT_CURVE       = os.path.join(OUT_DIR, "word_based_seq2seq_eng_to_ben_training_curve.png")
+OUT_BLEU_HIST   = os.path.join(OUT_DIR, "word_based_seq2seq_eng_to_ben_bleu_histogram.png")
+os.makedirs(OUT_DIR, exist_ok=True)
 
 # =============================================================================
 #  HYPER-PARAMETERS  (minimal / justified above)
@@ -296,7 +298,7 @@ def plot_training_curve(history, save_path):
     ax2.set_xlabel('Epoch'); ax2.set_ylabel('Accuracy')
     ax2.legend(); ax2.grid(True, alpha=0.3)
 
-    plt.suptitle('Seq2Seq LSTM  —  English → Bengali', fontsize=13,
+    plt.suptitle('Word-Based Plain Seq2Seq LSTM - English -> Bengali', fontsize=13,
                  fontweight='bold')
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -309,7 +311,7 @@ def plot_bleu_histogram(per_sentence_bleus, save_path):
     ax.hist(per_sentence_bleus, bins=30, color='#4e79a7', edgecolor='white', alpha=0.85)
     ax.axvline(np.mean(per_sentence_bleus), color='#e15759', linestyle='--',
                linewidth=1.8, label=f'Mean = {np.mean(per_sentence_bleus):.4f}')
-    ax.set_title('Per-Sentence BLEU Distribution (Test Set)', fontweight='bold')
+    ax.set_title('Word-Based Plain BLEU Distribution (Test Set)', fontweight='bold')
     ax.set_xlabel('Sentence BLEU'); ax.set_ylabel('Count')
     ax.legend(); ax.grid(True, alpha=0.3)
     plt.tight_layout()

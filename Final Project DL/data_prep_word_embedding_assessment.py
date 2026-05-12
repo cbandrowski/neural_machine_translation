@@ -135,9 +135,11 @@ def setup_bengali_font():
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
 
-OUT_PCA_ALL = os.path.join(BASE_DIR, "word_based_word_embedding_pca_all_words.png")
-OUT_PCA_TOP = os.path.join(BASE_DIR, "word_based_word_embedding_pca_top_words.png")
-OUT_NEAREST = os.path.join(BASE_DIR, "word_based_word_embedding_nearest_neighbours.png")
+OUT_DIR = os.path.join(BASE_DIR, "output", "word_based")
+OUT_PCA_ALL = os.path.join(OUT_DIR, "word_based_word_embedding_pca_all_words.png")
+OUT_PCA_TOP = os.path.join(OUT_DIR, "word_based_word_embedding_pca_top_words.png")
+OUT_NEAREST = os.path.join(OUT_DIR, "word_based_word_embedding_nearest_neighbours.png")
+os.makedirs(OUT_DIR, exist_ok=True)
 
 
 # =============================================================================
@@ -548,8 +550,8 @@ if __name__ == '__main__':
     print("\n  Plot B — PCA top 50 words:")
     plot_pca_top_words(embeddings, tokenizer, OUT_PCA_TOP, font_prop, top_n=50)
 
-    OUT_NEAREST_ENG = os.path.join(BASE_DIR, "word_based_word_embedding_nearest_neighbours_english.png")
-    OUT_NEAREST_BEN = os.path.join(BASE_DIR, "word_based_word_embedding_nearest_neighbours_bengali.png")
+    OUT_NEAREST_ENG = os.path.join(OUT_DIR, "word_based_word_embedding_nearest_neighbours_english.png")
+    OUT_NEAREST_BEN = os.path.join(OUT_DIR, "word_based_word_embedding_nearest_neighbours_bengali.png")
 
     print("\n  Plot C1 — English query words nearest neighbours:")
     plot_nearest_neighbours(embeddings, tokenizer, ENG_QUERY_WORDS, OUT_NEAREST_ENG,
