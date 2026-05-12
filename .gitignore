@@ -1,0 +1,12 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Large raw new dataset
+Final Project DL/newDS/2.75M/
+
+# Generated newDS sampled data and vocab files
+Final Project DL/newDS/data/
+
+# Generated figures and analysis outputs
+Final Project DL/newDS/output/
