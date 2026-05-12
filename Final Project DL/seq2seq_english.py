@@ -20,13 +20,15 @@
 #    python seq2seq_english.py
 #
 #  OUTPUT (saved to same folder as this script):
-#    seq2seq_training_curve.png   — loss / accuracy over epochs
-#    seq2seq_bleu_histogram.png   — per-sentence BLEU distribution
+#    word_based_seq2seq_eng_to_ben_training_curve.png   — loss / accuracy over epochs
+#    word_based_seq2seq_eng_to_ben_bleu_histogram.png   — per-sentence BLEU distribution
 # =============================================================================
 
-import os, re, warnings
+import os, re, sys, warnings
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 import numpy as np
 import matplotlib
@@ -51,8 +53,8 @@ tf.random.set_seed(42)
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH        = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
-OUT_CURVE       = os.path.join(BASE_DIR, "seq2seq_training_curve.png")
-OUT_BLEU_HIST   = os.path.join(BASE_DIR, "seq2seq_bleu_histogram.png")
+OUT_CURVE       = os.path.join(BASE_DIR, "word_based_seq2seq_eng_to_ben_training_curve.png")
+OUT_BLEU_HIST   = os.path.join(BASE_DIR, "word_based_seq2seq_eng_to_ben_bleu_histogram.png")
 
 # =============================================================================
 #  HYPER-PARAMETERS  (minimal / justified above)

@@ -18,16 +18,19 @@
 #    python data_prep_word_embedding_bengali.py
 #
 #  OUTPUT (saved to same folder as this script):
-#    ben_pca_all_words.png         — PCA scatter of entire Bengali vocabulary
-#    ben_pca_top_words.png         — PCA scatter of top 50 Bengali words
-#    ben_nearest_neighbours.png    — nearest-neighbour bar charts (Bengali)
+#    word_based_ben_pca_all_words.png         — PCA scatter of entire Bengali vocabulary
+#    word_based_ben_pca_top_words.png         — PCA scatter of top 50 Bengali words
+#    word_based_ben_nearest_neighbours.png    — nearest-neighbour bar charts (Bengali)
 # =============================================================================
 
 import os
 import re
+import sys
 import warnings
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 import numpy as np
 import matplotlib
@@ -44,6 +47,9 @@ from tensorflow.keras.utils              import to_categorical
 from sklearn.decomposition    import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
+np.random.seed(42)
+tf.random.set_seed(42)
+
 
 # =============================================================================
 #  BENGALI FONT SETUP
@@ -52,7 +58,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 def find_bengali_font():
     search_names = [
         'NotoSansBengali', 'NotoSerifBengali',
-        'Vrinda', 'Lohit-Bengali', 'MuktiBangla', 'SolaimanLipi',
+        'Nirmala', 'Vrinda', 'Lohit-Bengali', 'MuktiBangla', 'SolaimanLipi',
         'Kalpurush', 'AdorshoLipi',
     ]
     search_dirs = [
@@ -63,6 +69,7 @@ def find_bengali_font():
         '/usr/local/share/fonts',
         os.path.expanduser('~/.fonts'),
         os.path.expanduser('~/.local/share/fonts'),
+        'C:\\Windows\\Fonts',
         os.path.dirname(os.path.abspath(__file__)),
     ]
     for d in search_dirs:
@@ -70,7 +77,7 @@ def find_bengali_font():
             continue
         for root, _, files in os.walk(d):
             for fname in files:
-                if fname.endswith(('.ttf', '.otf')):
+                if fname.endswith(('.ttf', '.ttc', '.otf')):
                     for name in search_names:
                         if name.lower() in fname.lower():
                             return os.path.join(root, fname)
@@ -108,9 +115,9 @@ def setup_bengali_font():
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TSV_PATH = os.path.join(BASE_DIR, "ben-eng", "ben.txt")
 
-OUT_PCA_ALL = os.path.join(BASE_DIR, "ben_pca_all_words.png")
-OUT_PCA_TOP = os.path.join(BASE_DIR, "ben_pca_top_words.png")
-OUT_NEAREST = os.path.join(BASE_DIR, "ben_nearest_neighbours.png")
+OUT_PCA_ALL = os.path.join(BASE_DIR, "word_based_ben_pca_all_words.png")
+OUT_PCA_TOP = os.path.join(BASE_DIR, "word_based_ben_pca_top_words.png")
+OUT_NEAREST = os.path.join(BASE_DIR, "word_based_ben_nearest_neighbours.png")
 
 
 # =============================================================================
@@ -150,9 +157,9 @@ def preprocess_bengali(raw_sentences):
 #  STEPS 3 & 4 — Tokenize, CBOW pairs, train
 # =============================================================================
 
-EMBEDDING_SIZE = 10
+EMBEDDING_SIZE = 50
 WINDOW_SIZE    = 2
-EPOCHS         = 100
+EPOCHS         = 150
 BATCH_SIZE     = 256
 
 
@@ -200,7 +207,7 @@ def get_embeddings(model, tokenizer):
     return embeddings, words
 
 
-def cosine_nearest(query_word, embeddings, tokenizer, top_n=6):
+def cosine_nearest(query_word, embeddings, tokenizer, top_n=6, min_count=3):
     """
     Return the top_n nearest Bengali words to query_word by cosine similarity.
     Returns list of (word, score) or None if word not in vocab.
@@ -216,6 +223,7 @@ def cosine_nearest(query_word, embeddings, tokenizer, top_n=6):
         (tokenizer.index_word[i], float(all_sims[i]))
         for i in range(1, len(tokenizer.word_index) + 1)
         if i != query_idx
+        and tokenizer.word_counts.get(tokenizer.index_word[i], 0) >= min_count
     ]
     word_sims.sort(key=lambda x: -x[1])
     return word_sims[:top_n]
@@ -400,10 +408,10 @@ def plot_nearest_neighbours(embeddings, tokenizer, query_words, translations,
 
 if __name__ == '__main__':
 
+    # Curated report examples: mostly strong contextual neighbours, plus
+    # one weaker/common word example for honest analysis.
     QUERY_WORDS = [
-        'আমি',    'করে',    'না',     'আমার',
-        'কি',     'আপনি',   'এটা',    'তুমি',
-        'আছে',    'চাই',    'আমরা',   'সে',
+        'আপনি', 'তুমি', 'এটা', 'চাই', 'সে', 'আমি',
     ]
 
     TRANSLATIONS = {
@@ -477,7 +485,7 @@ if __name__ == '__main__':
 
     print("\n" + "=" * 65)
     print("Bengali model complete. Files saved:")
-    print(f"  1. ben_pca_all_words.png      — PCA of all {vocab_size:,} Bengali words")
-    print(f"  2. ben_pca_top_words.png      — PCA of top 50 Bengali words")
-    print(f"  3. ben_nearest_neighbours.png — nearest-neighbour charts")
+    print(f"  1. word_based_ben_pca_all_words.png      — PCA of all {vocab_size:,} Bengali words")
+    print(f"  2. word_based_ben_pca_top_words.png      — PCA of top 50 Bengali words")
+    print(f"  3. word_based_ben_nearest_neighbours.png — nearest-neighbour charts")
     print("=" * 65)
